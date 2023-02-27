@@ -1,0 +1,55 @@
+import { Injectable } from '@nestjs/common';
+import algosdk from 'algosdk';
+
+@Injectable()
+export class ContractGeneratorService {
+  generateContract(): string {
+    // DAO Voting Asset ID (set to 0 for all ASA's)
+    const voting_asset_id = new algosdk.Int(0);
+
+    // Minimum number of DAO Voting Assets required to create a proposition
+    const min_create_votes = new algosdk.Int(10);
+
+    // Minimum number of DAO Voting Assets and Blocks required to escalate a proposition to a vote to release escrowed funds
+    const min_escrow_votes = new algosdk.Int(20);
+    const min_escrow_blocks = new algosdk.Int(100);
+
+    // Minimum number of DAO Voting Assets and Blocks required to execute a vote to release escrowed funds
+    const min_release_votes = new algosdk.Int(15);
+    const min_release_blocks = new algosdk.Int(50);
+
+    // Designated Wallet where funds will be sent if the option is allowed when created
+    const designated_wallet = new algosdk.Address("YOUR_DESIGNATED_WALLET_ADDRESS_HERE");
+
+    // Quantity of escrowed funds transferred if the Vote to Release Escrowed Funds is approved
+    const escrowed_funds = new algosdk.Int(100000);
+
+    // Define the voting asset IDs
+    const asset_ids = [
+      new algosdk.Int(1),
+      new algosdk.Int(2),
+      new algosdk.Int(3),
+      // add more asset IDs here
+      // ...
+      new algosdk.Int(225),
+    ];
+
+    // Define the voting logic
+    const vote_counter = new algosdk.Seq([
+      // Check if the transaction is a payment
+      new algosdk.If(
+        new algosdk.Equals(new algosdk.Global.groupSize(), new algosdk.Int(1)),
+        new algosdk.Seq([
+          new algosdk.Assign(
+            'payment',
+            new algosdk.Txn.payment(),
+          ),
+          // Check if the payment amount is 0
+          new algosdk.If(
+            new algosdk.Equals(new algosdk.GetField(new algosdk.Var('payment'), 'amount'), new algosdk.Int(0)),
+            new algosdk.Seq([
+              // Check if the payment asset ID is one of the voting assets
+              new algosdk.Assign(
+                'vote_check',
+                new algosdk.Or(
+                  asset_ids.map((asset_id) => new algosdk.GetField(new algosdk.Var('payment'), 'assetCloseTo', asset_id)),
