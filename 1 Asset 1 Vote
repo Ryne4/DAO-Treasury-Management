@@ -1,0 +1,49 @@
+from pyteal import *
+
+def escrow_account():
+    on_creation = Seq([
+        App.globalPut(Bytes("Creator"), Txn.sender()),
+        App.globalPut(Bytes("MinVoteOption"), Int(1)),
+        App.globalPut(Bytes("MinVotes"), Int(5)),
+        App.globalPut(Bytes("MinBlocks"), Int(3)),
+        App.globalPut(Bytes("EscrowAddress"), Txn.accounts[1]),
+        App.globalPut(Bytes("ProposedOption"), Txn.application_args[0]),
+        App.globalPut(Bytes("NumVotes"), Int(0)),
+        App.globalPut(Bytes("Votes"), Txn.application_args[1]),
+        App.globalPut(Bytes("Approved"), Int(0)),
+        App.globalPut(Bytes("AssetID"), Int(0)),
+        Return(Int(1))
+    ])
+
+    on_approval = Seq([
+        App.globalPut(Bytes("AssetID"), Txn.asset_amount()),
+        Return(Int(1))
+    ])
+
+    is_asset_held = AssetHolding.balance(Int(1), App.globalGet(Bytes("AssetID"))) >= Int(1)
+
+    verify_vote = And(
+        App.globalGet(Bytes("AssetID")) == Txn.asset_amount(),
+        is_asset_held,
+        App.globalGet(Bytes("NumVotes")) < App.globalGet(Bytes("MinVotes")),
+        Txn.application_args[0] == App.globalGet(Bytes("ProposedOption")),
+        Btoi(Txn.application_args[1]) > 0
+    )
+
+    vote = Seq([
+        App.globalPut(Bytes("Votes"), App.globalGet(Bytes("Votes")) + Btoi(Txn.application_args[1])),
+        App.globalPut(Bytes("NumVotes"), App.globalGet(Bytes("NumVotes")) + Int(1)),
+        Return(Int(1))
+    ])
+
+    on_complete = Seq([
+        App.globalPut(Bytes("Approved"), Int(1)),
+        Return(Int(1))
+    ])
+
+    return Cond(
+        [Txn.application_id() == Int(0), on_creation],
+        [Txn.on_completion() == OnComplete.Approve, on_approval],
+        [Txn.application_args[0] == Bytes("vote"), verify_vote, vote],
+        [Txn.on_completion() == OnComplete.Complete, on_complete]
+    )
