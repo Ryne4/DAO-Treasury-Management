@@ -1,0 +1,93 @@
+import React, { useState } from 'react';
+import { Form, Button } from 'react-bootstrap';
+import algosdk from 'algosdk';
+
+const algodClient = new algosdk.Algodv2();
+const indexerClient = new algosdk.Indexer({
+  'X-Algo-API-Token': process.env.REACT_APP_ALGOD_INDEXER_API_TOKEN,
+}, process.env.REACT_APP_ALGOD_INDEXER_API_URL);
+
+const CONTRACT_CREATION_FEE = 10000;
+
+const App = () => {
+  const [assetIds, setAssetIds] = useState([]);
+  const [address, setAddress] = useState('');
+  const [votingAssetId, setVotingAssetId] = useState(0);
+
+  const handleCheckAssets = async () => {
+    try {
+      const assets = await indexerClient.searchForAssets()
+        .limit(1000)
+        .do();
+      const filteredAssets = assets.assets.filter(asset => asset.params.decimals === 0 && asset.params.total === 1);
+      setAssetIds(filteredAssets.map(asset => asset.index));
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const handleCheckVotingAsset = async () => {
+    try {
+      const assetInfo = await algodClient.assetInformation(votingAssetId);
+      if (assetInfo.decimals !== 0 || assetInfo.total !== 1) {
+        throw new Error('The selected asset is invalid for voting');
+      }
+      setAddress(assetInfo.creator);
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const handleCreateContract = async () => {
+    try {
+      const daoTealCode = `#pragma version 4
+      int 0
+      txn ApplicationID
+      ==
+      bnz voting
+      int 0
+      return
+      voting:
+      gtxn 1 AssetID
+      ${assetIds.map(id => `==\ngtxn 1 AssetID ${id}\n||`).join('')}
+      bnz vote_yes
+      int 0
+      return
+      vote_yes:
+      int 1
+      return`;
+
+      const daoTeal = algosdk.compile(daoTealCode);
+      const daoApprovalProgram = new Uint8Array(daoTeal.result);
+      const daoClearProgram = new Uint8Array(Buffer.from('AiA=', 'base64'));
+      const daoApprovalProgramHash = algosdk.encodeAddress(daoApprovalProgram);
+      const daoClearProgramHash = algosdk.encodeAddress(daoClearProgram);
+      const suggestedParams = await algodClient.getTransactionParams().do();
+      const daoCreationTransaction = algosdk.makeApplicationCreateTxn(
+        address,
+        suggestedParams,
+        {
+          approvalProgram: daoApprovalProgram,
+          clearProgram: daoClearProgram,
+          localInts: 0,
+          localBytes: 0,
+          globalInts: 1,
+          globalBytes: 0,
+        },
+      );
+      const daoTransactionId = daoCreationTransaction.txID().toString();
+      const signedDaoTransaction = daoCreationTransaction.signTxn(process.env.REACT_APP_CREATOR_ACCOUNT_PRIVATE_KEY);
+      await algodClient.sendRawTransaction(signedDaoTransaction).do();
+
+      // Wait for the transaction to be confirmed
+      let daoCreated = false;
+      while (!daoCreated) {
+        const txInfo = await algodClient.pendingTransactionInformation(daoTransactionId).do();
+        if (txInfo['confirmed-round']) {
+          daoCreated = true;
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+     
