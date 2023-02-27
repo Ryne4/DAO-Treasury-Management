@@ -1,70 +1,86 @@
-from pyteal import *
+# DAO Voting Asset ID (set to 0 for all ASA's)
+voting_asset_id = Int(0)
 
-# Define the DAO voting asset ID
-DAO_VOTING_ASSET_ID = 1234567890
+# Minimum number of DAO Voting Assets required to create a proposition
+min_create_votes = Int(10)
 
-# Define the minimum number of voting assets required to create a proposition
-MIN_VOTING_ASSETS_CREATE_PROPOSITION = 10
+# Minimum number of DAO Voting Assets and Blocks required to escalate a proposition to a vote to release escrowed funds
+min_escrow_votes = Int(20)
+min_escrow_blocks = Int(100)
 
-# Define the minimum number of voting assets and blocks required to escalate a proposition to a vote
-MIN_VOTING_ASSETS_ESCALATE_PROPOSITION = 15
-MIN_BLOCKS_ESCALATE_PROPOSITION = 100
+# Minimum number of DAO Voting Assets and Blocks required to execute a vote to release escrowed funds
+min_release_votes = Int(15)
+min_release_blocks = Int(50)
 
-# Define the minimum number of voting assets and blocks required to execute a vote to release escrowed funds
-MIN_VOTING_ASSETS_EXECUTE_VOTE = 20
-MIN_BLOCKS_EXECUTE_VOTE = 200
+# Designated Wallet where funds will be sent if the option is allowed when created
+designated_wallet = Addr("YOUR_DESIGNATED_WALLET_ADDRESS_HERE")
 
-# Define the designated wallet where funds will be sent if the vote is approved
-DESIGNATED_WALLET = "WALLET_ADDRESS"
+# Quantity of escrowed funds transferred if the Vote to Release Escrowed Funds is approved
+escrowed_funds = Int(100000)
 
-# Define the quantity of escrowed funds to be transferred if the vote is approved
-ESCROWED_FUNDS_QUANTITY = 1000
+# Define the voting asset IDs
+asset_ids = [
+    Int(1),
+    Int(2),
+    Int(3),
+    # add more asset IDs here
+    # ...
+    Int(225)
+]
 
-# Define the voting options
-APPROVE = Int(1)
-DENY = Int(0)
+# Define the voting logic
+vote_counter = Seq([
+    # Check if the transaction is a payment
+    If(Global.group_size() == Int(1)):
+        payment = Txn.payment()
+        
+        # Check if the payment amount is 0
+        If(payment.amount() == Int(0)):
+            # Check if the payment asset ID is one of the voting assets
+            vote_check = Or(
+                [payment.asset_close_to(asset_id) for asset_id in asset_ids]
+            )
+            
+            # Check if the sender is the designated wallet
+            sender_check = payment.sender() == designated_wallet
+            
+            # Increment the vote counter if both checks pass
+            If(And(vote_check, sender_check)):
+                Vote.globalPut(voting_asset_id, Vote.globalGet(voting_asset_id) + Int(1))
+    Return(Int(1))
+])
 
-# Define the PyTeal logic for the contract
-def dao_treasury_management():
+# Define the contract logic
+contract = And(
+    # Only allow the designated wallet to receive funds
+    Txn.receiver() == designated_wallet,
     
-    # Input the DAO voting asset ID
-    dao_voting_asset_id = Txn.asset_close_to(DAO_VOTING_ASSET_ID)
+    # Verify that the correct number of DAO voting assets are present for each stage of the process
+    Global.group_size() >= min_create_votes,
+    Global.group_size() >= min_escrow_votes,
+    Txn.application_args.length() >= Int(1),
+    Btoi(Txn.application_args[0]) == voting_asset_id,
+    Global.group_size() >= min_release_votes,
+    Global.group_size() == Vote.globalGet(voting_asset_id),
+    Global.latest_timestamp() >= Txn.time() + min_escrow_blocks,
+    Global.latest_timestamp() >= Txn.time() + min_release_blocks,
     
-    # Create a proposition for the release of escrowed funds
-    create_proposition = And(
-        dao_voting_asset_id,
-        Global.group_size() >= MIN_VOTING_ASSETS_CREATE_PROPOSITION
-    )
-    
-    # Escalate the proposition to a vote for the release of escrowed funds
-    escalate_proposition = And(
-        dao_voting_asset_id,
-        Global.group_size() >= MIN_VOTING_ASSETS_ESCALATE_PROPOSITION,
-        Global.latest_timestamp() >= MIN_BLOCKS_ESCALATE_PROPOSITION
-    )
-    
-    # Execute the vote to release escrowed funds
-    execute_vote = And(
-        dao_voting_asset_id,
-        Global.group_size() >= MIN_VOTING_ASSETS_EXECUTE_VOTE,
-        Global.latest_timestamp() >= MIN_BLOCKS_EXECUTE_VOTE,
-        Btoi(Txn.application_args[0]) == APPROVE,
-        Txn.receiver() == Addr(DESIGNATED_WALLET),
-        Txn.amount() == ESCROWED_FUNDS_QUANTITY
-    )
-    
-    # Void the proposition if the vote is denied
-    void_proposition = Btoi(Txn.application_args[0]) == DENY
-    
-    # Combine the conditions for the contract
-    contract = Cond(
-        [create_proposition, App.localPut(Int(0), Int(1), Int(0))],
-        [escalate_proposition, App.localPut(Int(0), Int(2), Int(0))],
-        [execute_vote, App.fund(Addr(DESIGNATED_WALLET), Int(ESCROWED_FUNDS_QUANTITY))],
-        [void_proposition, App.localPut(Int(0), Int(3), Int(0))],
-    )
-    
-    return contract
-
-# Print the PyTeal code for the contract
-print(dao_treasury_management().disassemble())
+    # Execute the appropriate action based on the application arguments
+    If(Txn.application_args[1] == "create_proposition"):
+        # Verify that the minimum number of DAO voting assets are present
+        Verify(Txn.group_size() >= min_create_votes)
+        
+        # Store the proposed vote
+        Vote.globalPut(Int(0), Txn.application_args[2])
+        
+    ElseIf(Txn.application_args[1] == "escalate_proposition"):
+        # Verify that the minimum number of DAO voting assets are present
+        Verify(Txn.group_size() >= min_escrow_votes)
+        
+        # Check if the vote has already been escalated
+        Verify(Vote.globalGet(Int(1)) == Int(0))
+        
+        # Set the vote escalation flag
+        Vote.globalPut(Int(1), Int(1))
+        
+    ElseIf(Txn.application
