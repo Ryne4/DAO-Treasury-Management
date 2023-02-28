@@ -46,5 +46,9 @@ When deploying and using the DAO Voting Smart Contract, it is important to consi
 - Set appropriate parameters for the DAO Voting Smart Contract based on the needs of your organization and the amount of funds involved.
 - Limit access to the DAO Voting Smart Contract to authorized personnel only.
 - Use multi-factor authentication and strong passwords to protect your Algorand accounts.
-- Regularly monitor and review the activity on the DAO Voting Smart Contract to detect any suspicious behavior or attempts at
+- Regularly monitor and review the activity on the DAO Voting Smart Contract to detect any suspicious behavior or attempts at fraud.
+
+## Disclaimer
+
+The DAO Voting Smart Contract is provided as-is without any guarantees or warranties. The user assumes all risks and responsibilities associated with the use of the smart contract. The creators of the smart contract are not liable for any damages or losses resulting from the use of the smart contract.
 
