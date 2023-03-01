@@ -38,9 +38,7 @@ To use the DAO Voting Smart Contract, follow these steps:
 11. Execute the vote by calling the DAO Voting Smart Contract with the "execute_vote" argument.
 12. The funds will be transferred to the designated wallet if the vote is approved.
 
-## Security Considerations
-
-When deploying and using the DAO Voting Smart Contract, it is important to consider security best practices to ensure the safety of the funds and the integrity of the voting process. Here are some recommendations:
+## Note
 
 - Thoroughly review and test the smart contract code to identify and fix any potential vulnerabilities.
 - Set appropriate parameters for the DAO Voting Smart Contract based on the needs of your organization and the amount of funds involved.
